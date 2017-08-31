@@ -214,22 +214,15 @@ public class PlayerController implements InputProcessor, Disposable {
     private void processInput(float delta) {
         //Keyboard input
         if (keys.get(Keys.LEFT)) {
-            _player.calculateNextPosition(Entity.Direction.LEFT,
-                    delta);
             _player.setState(Entity.State.WALKING);
             _player.setDirection(Entity.Direction.LEFT, delta);
         } else if (keys.get(Keys.RIGHT)) {
-            _player.calculateNextPosition(Entity.Direction.RIGHT,
-                    delta);
             _player.setState(Entity.State.WALKING);
             _player.setDirection(Entity.Direction.RIGHT, delta);
         } else if (keys.get(Keys.UP)) {
-            _player.calculateNextPosition(Entity.Direction.UP, delta);
             _player.setState(Entity.State.WALKING);
             _player.setDirection(Entity.Direction.UP, delta);
         } else if (keys.get(Keys.DOWN)) {
-            _player.calculateNextPosition(Entity.Direction.DOWN,
-                    delta);
             _player.setState(Entity.State.WALKING);
             _player.setDirection(Entity.Direction.DOWN, delta);
         } else if (keys.get(Keys.QUIT)) {

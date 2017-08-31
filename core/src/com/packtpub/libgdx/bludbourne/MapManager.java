@@ -1,14 +1,15 @@
 package com.packtpub.libgdx.bludbourne;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.maps.MapLayer;
 import com.badlogic.gdx.maps.MapObject;
 import com.badlogic.gdx.maps.objects.RectangleMapObject;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.utils.Array;
 
 import java.util.Hashtable;
-import java.util.Map;
 
 /**
  * Created by kdenzel on 29.08.2017.
@@ -37,8 +38,8 @@ public class MapManager {
     private Vector2 _closestPlayerStartPosition;
     private Vector2 _convertedUnits;
     private Vector2 _playerStart;
-    private TiledMap _currentMap = null;
-    private String _currentMapName;
+    private Map _currentMap = null;
+    private MapFactory.MapType _currentMapName;
     private MapLayer _collisionLayer = null;
     private MapLayer _portalLayer = null;
     private MapLayer _spawnsLayer = null;
@@ -61,55 +62,20 @@ public class MapManager {
         _convertedUnits = new Vector2(0, 0);
     }
 
-    public void loadMap(String mapName) {
-        _playerStart.set(0, 0);
-        String mapFullPath = _mapTable.get(mapName);
-        if (mapFullPath == null || mapFullPath.isEmpty()) {
-            Gdx.app.debug(TAG, "Map is invalid");
+    public void loadMap(MapFactory.MapType mapType) {
+        Map map = MapFactory.getMap(mapType);
+
+        if( map == null ){
+            Gdx.app.debug(TAG, "Map does not exist!  ");
             return;
         }
-        if (_currentMap != null) {
-            _currentMap.dispose();
-        }
-        Utility.loadMapAsset(mapFullPath);
-        if (Utility.isAssetLoaded(mapFullPath)) {
-            _currentMap = Utility.getMapAsset(mapFullPath);
-            _currentMapName = mapName;
-        } else {
-            Gdx.app.debug(TAG, "Map not loaded");
-            return;
-        }
-        _collisionLayer = _currentMap.getLayers().
-                get(MAP_COLLISION_LAYER);
-        if (_collisionLayer == null) {
-            Gdx.app.debug(TAG, "No collision layer!");
-        }
-        _portalLayer = _currentMap.getLayers().
-                get(MAP_PORTAL_LAYER);
-        if (_portalLayer == null) {
-            Gdx.app.debug(TAG, "No portal layer!");
-        }
-        _spawnsLayer = _currentMap.getLayers().
-                get(MAP_SPAWNS_LAYER);
-        if (_spawnsLayer == null) {
-            Gdx.app.debug(TAG, "No spawn layer!");
-        } else {
-            Vector2 start = _playerStartLocationTable.
-                    get(_currentMapName);
-            if (start.isZero()) {
-                setClosestStartPosition(_playerStart);
-                start = _playerStartLocationTable.
-                        get(_currentMapName);
-            }
-            _playerStart.set(start.x, start.y);
-        }
-        Gdx.app.debug(TAG, "Player Start: (" + _playerStart.x +
-                "," + _playerStart.y + ")");
+        _currentMap = map;
+
     }
 
-    public TiledMap getCurrentMap() {
+    public Map getCurrentMap() {
         if (_currentMap == null) {
-            _currentMapName = TOWN;
+            _currentMapName = MapFactory.MapType.TOWN;
             loadMap(_currentMapName);
         }
         return _currentMap;
@@ -123,6 +89,10 @@ public class MapManager {
         return _portalLayer;
     }
 
+    public final Array<Entity> getCurrentMapEntities(){
+        return _currentMap.getMapEntities();
+    }
+
     public Vector2 getPlayerStartUnitScaled() {
         Vector2 playerStart = _playerStart.cpy();
         playerStart.set(_playerStart.x * UNIT_SCALE, _playerStart.y * UNIT_SCALE);
@@ -130,24 +100,7 @@ public class MapManager {
     }
 
     private void setClosestStartPosition(final Vector2 position) {
-        //Get last known position on this map
-        _playerStartPositionRect.set(0, 0);
-        _closestPlayerStartPosition.set(0, 0);
-        float shortestDistance = 0;
-
-        //Go through all player start positions and choose closest to last known position
-        for (MapObject object : _spawnsLayer.getObjects()) {
-            if (object.getName().equalsIgnoreCase(PLAYER_START)) {
-                ((RectangleMapObject) object).getRectangle().getPosition(_playerStartPositionRect);
-                float distance = position.dst2(_playerStartPositionRect);
-
-                if (distance < shortestDistance || shortestDistance == 0) {
-                    _closestPlayerStartPosition.set(_playerStartPositionRect);
-                    shortestDistance = distance;
-                }
-            }
-        }
-        _playerStartLocationTable.put(_currentMapName, _closestPlayerStartPosition.cpy());
+        _currentMap.setClosestStartPositionFromScaledUnits(position);
     }
 
     public void setClosestStartPositionFromScaledUnits(Vector2 position){
@@ -157,5 +110,12 @@ public class MapManager {
                 position.y/UNIT_SCALE);
         setClosestStartPosition(_convertedUnits);
     }
+
+    //TODO return Camera
+    public Camera getCamera() {
+        return null;
+    }
+
+
 }
 

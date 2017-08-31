@@ -1,23 +1,37 @@
 package com.packtpub.libgdx.bludbourne;
 
+import java.util.ArrayList;
 import java.util.UUID;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonValue;
 
 /**
  * Created by kdenzel on 29.08.2017.
  */
 
-public class Entity {
+public class Entity implements Disposable{
 
     private static final String TAG = Entity.class.getSimpleName();
+
+    public static final int FRAME_WIDTH = 16;
+    public static final int FRAME_HEIGHT = 16;
+
+    private static final int MAX_COMPONENTS = 5;
+
+    private Json _json;
+    private EntityConfig _entityConfig;
     private static final String _defaultSpritePath = "sprites/characters/Warrior.png";
     private Vector2 _velocity;
     private String _entityID;
@@ -33,22 +47,73 @@ public class Entity {
     private Array<TextureRegion> _walkUpFrames;
     private Array<TextureRegion> _walkDownFrames;
 
-    protected Vector2 _nextPlayerPosition;
+    private Array<Component> _components;
+    private InputComponent _inputComponent;
+    private GraphicsComponent _graphicsComponent;
+    private PhysicsComponent _physicsComponent;
+
+
     protected Vector2 _currentPlayerPosition;
     protected State _state = State.IDLE;
     protected float _frameTime = 0f;
     protected Sprite _frameSprite = null;
     protected TextureRegion _currentFrame = null;
-    public final int FRAME_WIDTH = 16;
-    public final int FRAME_HEIGHT = 16;
-    public static Rectangle boundingBox;
 
-    public enum State {
-        IDLE, WALKING
+
+    public static enum State {
+        IDLE,
+        WALKING,
+
+        IMMOBILE; //This should always be last
+
+        public static State getRandomNext() {
+            //Ignore IMMOBILE which should be last state
+            return State.values()[MathUtils.random(State.values().length - 2)];
+        }
     }
 
-    public enum Direction {
+    public static enum Direction {
         UP, RIGHT, DOWN, LEFT;
+
+        public static Direction getRandomNext() {
+            return Direction.values()[MathUtils.random(Direction.values().length - 1)];
+        }
+
+        public Direction getOpposite() {
+            if (this == LEFT) {
+                return RIGHT;
+            } else if (this == RIGHT) {
+                return LEFT;
+            } else if (this == UP) {
+                return DOWN;
+            } else {
+                return UP;
+            }
+        }
+    }
+
+    public static enum AnimationType {
+        WALK_LEFT,
+        WALK_RIGHT,
+        WALK_UP,
+        WALK_DOWN,
+        IDLE,
+        IMMOBILE
+    }
+
+    public Entity(InputComponent inputComponent, PhysicsComponent physicsComponent, GraphicsComponent graphicsComponent) {
+        _entityConfig = new EntityConfig();
+        _json = new Json();
+
+        _components = new Array<Component>(MAX_COMPONENTS);
+
+        _inputComponent = inputComponent;
+        _physicsComponent = physicsComponent;
+        _graphicsComponent = graphicsComponent;
+
+        _components.add(inputComponent);
+        _components.add(physicsComponent);
+        _components.add(graphicsComponent);
     }
 
     public Entity() {
@@ -57,9 +122,7 @@ public class Entity {
 
     public void initEntity() {
         this._entityID = UUID.randomUUID().toString();
-        this._nextPlayerPosition = new Vector2();
         this._currentPlayerPosition = new Vector2();
-        this.boundingBox = new Rectangle();
         this._velocity = new Vector2(2f, 2f);
 
         Utility.loadTextureAsset(_defaultSpritePath);
@@ -67,57 +130,11 @@ public class Entity {
         loadAllAnimations();
     }
 
-    public void update(float deltaTime) {
+    public void update(MapManager mapMgr, Batch batch, float deltaTime) {
         _frameTime = (_frameTime + deltaTime) % 5; //Avoid Overflow 0.x % 5 = 0.x
-
-        //We want the hitbox to be at the feet for a better feel;
-        setBoundingBoxSize(0, 0.5f);
-    }
-
-    public void init(float startX, float startY) {
-        this._currentPlayerPosition.x = startX;
-        this._currentPlayerPosition.y = startY;
-
-        this._nextPlayerPosition.x = startX;
-        this._nextPlayerPosition.y = startY;
-    }
-
-    public void setBoundingBoxSize(float percentageWidthReduced,
-                                   float percentageHeightReduced) {
-        //Update the current bounding box
-        float width;
-        float height;
-        float widthReductionAmount = 1.0f - percentageWidthReduced;
-        //.8f for 20% (1 - .20)
-        float heightReductionAmount = 1.0f - percentageHeightReduced;
-        //.8f for 20% (1 - .20)
-        if (widthReductionAmount > 0 && widthReductionAmount < 1) {
-            width = FRAME_WIDTH * widthReductionAmount;
-        } else {
-            width = FRAME_WIDTH;
-        }
-
-        if (heightReductionAmount > 0 && heightReductionAmount < 1) {
-            height = FRAME_HEIGHT * heightReductionAmount;
-        } else {
-            height = FRAME_HEIGHT;
-        }
-
-        if (width == 0 || height == 0) {
-            Gdx.app.debug(TAG, "Width and Height are 0!! " + width + ":" + height);
-        }
-
-        //neet do account for the unitscale, since the map coordiantes will be in pixels
-        float minX;
-        float minY;
-        if (MapManager.UNIT_SCALE > 0) {
-            minX = _nextPlayerPosition.x / MapManager.UNIT_SCALE;
-            minY = _nextPlayerPosition.y / MapManager.UNIT_SCALE;
-        } else {
-            minX = _nextPlayerPosition.x;
-            minY = _nextPlayerPosition.y;
-        }
-        boundingBox.set(minX, minY, width, height);
+        _inputComponent.update(this, deltaTime);
+        _physicsComponent.update(this, mapMgr, deltaTime);
+        _graphicsComponent.update(this, mapMgr,batch,deltaTime);
     }
 
     private void loadDefaultSprite() {
@@ -165,8 +182,12 @@ public class Entity {
         _walkUpAnimation = new Animation(0.25f, _walkUpFrames, Animation.PlayMode.LOOP);
     }
 
+    @Override
     public void dispose() {
-        Utility.unloadAsset(_defaultSpritePath);
+        for(Component component : _components){
+            component.dispose();
+        }
+        //Utility.unloadAsset(_defaultSpritePath);
     }
 
     public void setState(State state) {
@@ -183,14 +204,6 @@ public class Entity {
 
     public Vector2 getCurrentPosition() {
         return _currentPlayerPosition;
-    }
-
-    public void setCurrentPosition(float currentPositionX, float currentPositionY) {
-        _frameSprite.setX(currentPositionX);
-        _frameSprite.setY(currentPositionY);
-
-        this._currentPlayerPosition.x = currentPositionX;
-        this._currentPlayerPosition.y = currentPositionY;
     }
 
     public void setDirection(Direction direction, float
@@ -217,36 +230,45 @@ public class Entity {
         }
     }
 
-    public void setNextPositionToCurrent() {
-        setCurrentPosition(_nextPlayerPosition.x,
-                _nextPlayerPosition.y);
+    public EntityConfig getEntityConfig() {
+        return _entityConfig;
     }
 
-    public void calculateNextPosition(Direction currentDirection,
-                                      float deltaTime) {
-        float testX = _currentPlayerPosition.x;
-        float testY = _currentPlayerPosition.y;
-        _velocity.scl(deltaTime);
-        switch (currentDirection) {
-            case LEFT:
-                testX -= _velocity.x;
-                break;
-            case RIGHT:
-                testX += _velocity.x;
-                break;
-            case UP:
-                testY += _velocity.y;
-                break;
-            case DOWN:
-                testY -= _velocity.y;
-                break;
-            default:
-                break;
-        }
-        _nextPlayerPosition.x = testX;
-        _nextPlayerPosition.y = testY;
+    public void sendMessage(Component.MESSAGE messageType, String ...args){
+        String fullMessage = messageType.toString();
 
-        //velocity
-        _velocity.scl(1/deltaTime);
+        for(String string : args){
+            fullMessage += Component.MESSAGE_TOKEN + string;
+        }
+
+        for(Component component : _components){
+            component.receiveMessage(fullMessage);
+        }
+    }
+
+    public Rectangle getCurrentBoundingBox() {
+        return _physicsComponent._boundingBox;
+    }
+
+    public void setEntityConfig(EntityConfig config){
+        _entityConfig = config;
+    }
+
+    public static EntityConfig getEntityConfig(String configFilePath){
+        Json json = new Json();
+        return json.fromJson(EntityConfig.class,
+                Gdx.files.internal(configFilePath));
+    }
+
+    public static Array<EntityConfig> getEntityConfigs(String configFilePath){
+        Json json = new Json();
+        Array<EntityConfig> configs = new Array<EntityConfig>();
+        ArrayList<JsonValue> list = json.fromJson(ArrayList.class,
+                Gdx.files.internal(configFilePath));
+        for (JsonValue jsonVal : list) {
+            configs.add(json.readValue(EntityConfig.class,
+                    jsonVal));
+        }
+        return configs;
     }
 }
